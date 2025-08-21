@@ -1,0 +1,1 @@
+# odoo_pos_payment_multicurrency

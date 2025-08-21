@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_pos_payment_method_form_multicurrency" model="ir.ui.view">
+        <field name="name">pos.payment.method.form.multicurrency</field>
+        <field name="model">pos.payment.method</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="journal_id"/>
+                    </group>
+                    <group string="Multi-Currency">
+                        <field name="payment_currency_id"/>
+                        <field name="exchange_rate_source"/>
+                        <field name="manual_exchange_rate"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
