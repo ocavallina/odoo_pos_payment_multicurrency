@@ -19,25 +19,55 @@ class PosConfig(models.Model):
         help='Base currency for exchange rate calculations'
     )
 
-    @api.constrains('pricelist_id', 'use_pricelist', 'available_pricelist_ids', 
-                    'journal_id', 'invoice_journal_id', 'payment_method_ids')
-    def _check_currencies(self):
-        """Override currency validation to allow multi-currency when enabled"""
-        for config in self:
-            if not config.multi_currency_payments:
-                super()._check_currencies()
-                continue
-                
-            # Validaciones para multi-currency
-            if config.use_pricelist and config.pricelist_id and config.pricelist_id not in config.available_pricelist_ids:
-                raise ValidationError(_("The default pricelist must be included in the available pricelists."))
+    @api.onchange('multi_currency_payments')
+    def _onchange_multi_currency_payments(self):
+        """Set base currency when enabling multi-currency"""
+        if self.multi_currency_payments and not self.base_currency_id:
+            self.base_currency_id = self.env.company.currency_id
 
-            # Validar que las monedas de pago estén activas
-            for pm in config.payment_method_ids:
-                if (pm.payment_currency_id and 
-                    pm.payment_currency_id != config.currency_id and
-                    not pm.payment_currency_id.active):
-                    raise ValidationError(
-                        _("Payment method '%s' uses inactive currency '%s'") % 
-                        (pm.name, pm.payment_currency_id.name)
-                    )
+    @api.constrains('multi_currency_payments', 'base_currency_id', 'payment_method_ids')
+    def _check_multicurrency_configuration(self):
+        """Validate multi-currency configuration"""
+        for config in self:
+            if config.multi_currency_payments:
+                # Base currency debe estar definida
+                if not config.base_currency_id:
+                    raise ValidationError(_("Base Currency is required when Multi-Currency Payments is enabled."))
+                
+                # Base currency debe estar activa
+                if not config.base_currency_id.active:
+                    raise ValidationError(_("Base Currency must be active."))
+                
+                # Validar payment methods con currencies
+                for pm in config.payment_method_ids:
+                    if pm.payment_currency_id:
+                        # Currency del payment method debe estar activa
+                        if not pm.payment_currency_id.active:
+                            raise ValidationError(
+                                _("Payment method '%s' uses inactive currency '%s'. "
+                                  "Please activate the currency or remove it from the payment method.") % 
+                                (pm.name, pm.payment_currency_id.name)
+                            )
+                        
+                        # Validar manual exchange rate
+                        if pm.exchange_rate_source == 'manual' and pm.manual_exchange_rate <= 0:
+                            raise ValidationError(
+                                _("Payment method '%s' has invalid manual exchange rate. "
+                                  "Exchange rate must be greater than 0.") % pm.name
+                            )
+
+    def write(self, vals):
+        """Override write to handle currency changes"""
+        result = super().write(vals)
+        
+        # Si se desactiva multi-currency, limpiar configuraciones relacionadas
+        if 'multi_currency_payments' in vals and not vals['multi_currency_payments']:
+            for config in self:
+                # Limpiar currency específica de payment methods
+                config.payment_method_ids.write({
+                    'payment_currency_id': False,
+                    'exchange_rate_source': 'auto',
+                    'manual_exchange_rate': 1.0
+                })
+        
+        return result

@@ -10,20 +10,21 @@
         - Enable multi-currency payments per POS configuration
         - Set specific currency per payment method
         - Real-time currency conversion using Odoo exchange rates
-        - Automatic exchange rate handling
+        - Automatic and manual exchange rate handling
+        - Proper validation and error handling
     """,
     'depends': ['point_of_sale'],
     'data': [
+        'security/ir.model.access.csv',
         'views/pos_config_views.xml',
         'views/pos_payment_method_views.xml',
     ],
     'assets': {
-        'point_of_sale._assets_pos': [
-            'pos_payment_multicurrency/static/src/js/payment_line.js',
-            'pos_payment_multicurrency/static/src/js/payment_screen.js',
-        ],
+        # Assets deshabilitados - archivo faltante
     },
     'installable': True,
     'auto_install': False,
     'license': 'LGPL-3',
+    'author': 'Your Company',
+    'website': 'https://www.yourcompany.com',
 }

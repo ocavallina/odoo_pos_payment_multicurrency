@@ -3,20 +3,29 @@
     <record id="view_pos_payment_method_form_multicurrency" model="ir.ui.view">
         <field name="name">pos.payment.method.form.multicurrency</field>
         <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_form"/>
         <field name="arch" type="xml">
-            <form>
-                <sheet>
-                    <group>
-                        <field name="name"/>
-                        <field name="journal_id"/>
-                    </group>
-                    <group string="Multi-Currency">
-                        <field name="payment_currency_id"/>
-                        <field name="exchange_rate_source"/>
-                        <field name="manual_exchange_rate"/>
-                    </group>
-                </sheet>
-            </form>
+            <!-- Añadir campos de multi-currency después del primer grupo -->
+            <xpath expr="//group[@name='Payment methods']/group[1]" position="after">
+                <group string="Multi-Currency" name="multicurrency_group">
+                    <field name="payment_currency_id" options="{'no_create': True, 'no_open': True}"/>
+                    <field name="exchange_rate_source" invisible="not payment_currency_id"/>
+                    <field name="manual_exchange_rate" 
+                           invisible="exchange_rate_source != 'manual' or not payment_currency_id"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Vista tree para mostrar currency info -->
+    <record id="view_pos_payment_method_tree_multicurrency" model="ir.ui.view">
+        <field name="name">pos.payment.method.tree.multicurrency</field>
+        <field name="model">pos.payment.method</field>
+        <field name="inherit_id" ref="point_of_sale.pos_payment_method_view_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='journal_id']" position="after">
+                <field name="payment_currency_id" optional="show"/>
+            </xpath>
         </field>
     </record>
 </odoo>

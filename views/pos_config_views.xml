@@ -5,17 +5,33 @@
         <field name="model">pos.config</field>
         <field name="inherit_id" ref="point_of_sale.pos_config_view_form"/>
         <field name="arch" type="xml">
+            <!-- Añadir después de la sección de Other Devices -->
             <xpath expr="//setting[@id='other_devices']" position="after">
-                <setting string="Pagos Multi-Divisa" help="Permite pagos en diferentes monedas">
+                <setting string="Multi-Currency Payments" help="Allow payments in different currencies for this POS">
                     <field name="multi_currency_payments"/>
                     <div class="content-group mt16" invisible="not multi_currency_payments">
                         <div class="row">
-                            <label string="Moneda Base" for="base_currency_id" class="col-lg-3 o_light_label"/>
-                            <field name="base_currency_id" class="col-lg-9"/>
+                            <div class="col-lg-4 o_light_label">
+                                <label string="Base Currency" for="base_currency_id"/>
+                            </div>
+                            <div class="col-lg-8">
+                                <field name="base_currency_id" 
+                                       options="{'no_create': True, 'no_open': True}"
+                                       required="multi_currency_payments"/>
+                            </div>
+                        </div>
+                        <div class="row mt8">
+                            <div class="col-12">
+                                <div class="alert alert-info" role="alert">
+                                    <strong>Note:</strong> Configure payment currencies in your payment methods.
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </setting>
             </xpath>
         </field>
     </record>
+
+
 </odoo>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <!-- Multi-currency payment info display -->
+    <t t-name="PaymentMethodCurrencyBadge" owl="1">
+        <span t-if="props.currencyInfo" class="badge badge-info ms-2" t-esc="props.currencyInfo"/>
+    </t>
+</templates>

@@ -21,17 +21,5 @@ class PosPayment(models.Model):
         string='Exchange Rate Used',
         digits=(12, 6),
         default=1.0,
-        help='Exchange rate used for this payment'
+        help='Exchange rate used for this payment (1 payment currency = X base currency)'
     )
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        """Set payment currency data on creation"""
-        for vals in vals_list:
-            payment_method = self.env['pos.payment.method'].browse(vals.get('payment_method_id'))
-            if payment_method.payment_currency_id:
-                vals['payment_currency_id'] = payment_method.payment_currency_id.id
-                if 'payment_amount' not in vals:
-                    vals['payment_amount'] = vals.get('amount', 0)
-                vals['payment_exchange_rate'] = payment_method.get_exchange_rate()
-        return super().create(vals_list)

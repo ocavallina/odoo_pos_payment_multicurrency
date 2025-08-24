@@ -1,1 +1,7 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_pos_payment_multicurrency_user,pos.payment.multicurrency.user,point_of_sale.model_pos_payment,point_of_sale.group_pos_user,1,1,1,0
+access_pos_payment_multicurrency_manager,pos.payment.multicurrency.manager,point_of_sale.model_pos_payment,point_of_sale.group_pos_manager,1,1,1,1
+access_pos_payment_method_multicurrency_user,pos.payment.method.multicurrency.user,point_of_sale.model_pos_payment_method,point_of_sale.group_pos_user,1,1,1,0
+access_pos_payment_method_multicurrency_manager,pos.payment.method.multicurrency.manager,point_of_sale.model_pos_payment_method,point_of_sale.group_pos_manager,1,1,1,1
+access_pos_config_multicurrency_user,pos.config.multicurrency.user,point_of_sale.model_pos_config,point_of_sale.group_pos_user,1,0,0,0
+access_pos_config_multicurrency_manager,pos.config.multicurrency.manager,point_of_sale.model_pos_config,point_of_sale.group_pos_manager,1,1,1,0
