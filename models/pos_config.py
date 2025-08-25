@@ -25,6 +25,27 @@ class PosConfig(models.Model):
         if self.multi_currency_payments and not self.base_currency_id:
             self.base_currency_id = self.env.company.currency_id
 
+    def refresh_exchange_rates(self, config_ids=None):
+        """Method called from frontend to refresh exchange rates"""
+        if not config_ids:
+            config_ids = [self.id]
+        
+        configs = self.browse(config_ids)
+        result = {}
+        
+        for config in configs:
+            if not config.multi_currency_payments:
+                continue
+                
+            config_rates = {}
+            for method in config.payment_method_ids.filtered('payment_currency_id'):
+                rate = method.get_exchange_rate()
+                config_rates[method.id] = rate
+                
+            result[config.id] = config_rates
+            
+        return result
+
     @api.constrains('multi_currency_payments', 'base_currency_id', 'payment_method_ids')
     def _check_multicurrency_configuration(self):
         """Validate multi-currency configuration"""

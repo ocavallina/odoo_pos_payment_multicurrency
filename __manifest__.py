@@ -6,12 +6,6 @@
     'summary': 'Enable payments in multiple currencies on POS',
     'description': """
         This module extends Odoo POS to support payments in multiple currencies.
-        Features:
-        - Enable multi-currency payments per POS configuration
-        - Set specific currency per payment method
-        - Real-time currency conversion using Odoo exchange rates
-        - Automatic and manual exchange rate handling
-        - Proper validation and error handling
     """,
     'depends': ['point_of_sale'],
     'data': [
@@ -20,11 +14,11 @@
         'views/pos_payment_method_views.xml',
     ],
     'assets': {
-        # Assets deshabilitados - archivo faltante
+        'point_of_sale._assets_pos': [
+            'pos_payment_multicurrency/static/src/js/multicurrency_visual.js',
+        ],
     },
     'installable': True,
     'auto_install': False,
     'license': 'LGPL-3',
-    'author': 'Your Company',
-    'website': 'https://www.yourcompany.com',
 }

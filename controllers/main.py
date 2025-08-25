@@ -13,21 +13,26 @@ class PosMultiCurrencyController(http.Controller):
         """Refresh exchange rates for POS payment methods"""
         try:
             if not config_id:
-                return {}
+                return {'success': False, 'error': 'Config ID required'}
                 
             pos_config = request.env['pos.config'].browse(config_id)
             if not pos_config.exists() or not pos_config.multi_currency_payments:
-                return {}
+                return {'success': False, 'error': 'Multi-currency not enabled'}
                 
             rates = {}
-            for method in pos_config.payment_method_ids:
-                if method.payment_currency_id:
-                    # Calculate fresh exchange rate
-                    rate = method.get_exchange_rate()
-                    rates[method.id] = rate
+            base_currency = pos_config.base_currency_id
+            
+            for method in pos_config.payment_method_ids.filtered('payment_currency_id'):
+                # Calculate fresh exchange rate
+                rate = method.get_exchange_rate()
+                rates[method.id] = {
+                    'rate': rate,
+                    'currency': method.payment_currency_id.read(['id', 'name', 'symbol'])[0] if method.payment_currency_id else None,
+                    'base_currency': base_currency.read(['id', 'name', 'symbol'])[0] if base_currency else None
+                }
                     
-            return rates
+            return {'success': True, 'rates': rates}
             
         except Exception as e:
             _logger.warning("Error refreshing exchange rates: %s", e)
-            return {}
+            return {'success': False, 'error': str(e)}
