@@ -1,0 +1,8 @@
+# Archivos y directorios de caché de Python
+__pycache__/
+
+# Archivos específicos de caché (aunque la línea anterior ya los cubre)
+*.pyc
+
+# Archivos generados por el sistema operativo, etc.
+.DS_Store

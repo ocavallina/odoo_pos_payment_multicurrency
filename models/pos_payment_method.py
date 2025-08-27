@@ -37,12 +37,30 @@ class PosPaymentMethod(models.Model):
         for record in self:
             record.current_exchange_rate = record.get_exchange_rate()
 
+    # ENFOQUE CONSERVADOR: Solo extender campos, no override métodos críticos
     @api.model
     def _load_pos_data_fields(self, config_id):
-        """Add new fields to POS frontend data"""
-        fields = super()._load_pos_data_fields(config_id)
+        """Add new fields to POS frontend data - CONSERVATIVE APPROACH"""
+        try:
+            # Llamar al método padre de forma segura
+            fields = super()._load_pos_data_fields(config_id)
+        except AttributeError:
+            # Si el método padre no existe, usar campos básicos
+            fields = [
+                'id', 'name', 'journal_id', 'is_cash_count', 
+                'split_transactions', 'outstanding_account_id'
+            ]
+        except Exception as e:
+            # Log error pero continúa
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(f"Error calling super()._load_pos_data_fields: {e}")
+            fields = [
+                'id', 'name', 'journal_id', 'is_cash_count', 
+                'split_transactions', 'outstanding_account_id'
+            ]
         
-        # Añadir los nuevos campos para multi-currency
+        # Añadir campos multi-currency de forma segura
         multicurrency_fields = [
             'payment_currency_id', 
             'exchange_rate_source', 
@@ -50,9 +68,9 @@ class PosPaymentMethod(models.Model):
             'current_exchange_rate'
         ]
         
-        # Evitar duplicados y añadir solo los campos que no existen
+        # Verificar que el campo existe en el modelo antes de añadirlo
         for field in multicurrency_fields:
-            if field not in fields:
+            if hasattr(self, field) and field not in fields:
                 fields.append(field)
                 
         return fields
@@ -68,7 +86,6 @@ class PosPaymentMethod(models.Model):
             return self.manual_exchange_rate
             
         # Usar sistema nativo de Odoo para tasas de cambio
-        # Buscar config desde el contexto o usar company currency como fallback
         base_currency = self.env.company.currency_id
         
         # Intentar obtener la currency base desde pos.config si está disponible
@@ -89,8 +106,10 @@ class PosPaymentMethod(models.Model):
                 self.env.company,
                 date or fields.Date.today()
             )
-        except:
-            # Fallback si hay problemas con el rate
+        except Exception as e:
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(f"Error getting exchange rate: {e}")
             return 1.0
 
     @api.depends('name', 'payment_currency_id', 'current_exchange_rate')
