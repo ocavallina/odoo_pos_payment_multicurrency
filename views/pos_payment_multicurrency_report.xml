@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_pos_payment_report" model="ir.ui.view">
+        <field name="name">POS Payments Report</field>
+        <field name="model">pos.payment</field>
+        <field name="arch" type="xml">
+            <tree string="POS Payments" create="false" edit="false">
+                <field name="session_id"/>
+                <field name="payment_method_id"/>
+                <field name="amount" sum="Total"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_pos_payment_report" model="ir.actions.act_window">
+        <field name="name">POS Payments Report</field>
+        <field name="res_model">pos.payment</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_pos_payment_report"/>
+    </record>
+
+    <menuitem 
+        id="menu_pos_payment_report"
+        name="POS Payments" 
+        parent="point_of_sale.menu_point_of_sale"
+        action="action_pos_payment_report"/>
+</odoo>

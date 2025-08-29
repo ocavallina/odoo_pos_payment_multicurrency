@@ -83,3 +83,19 @@ class PosMultiCurrencyController(http.Controller):
             _logger = logging.getLogger(__name__)
             _logger.error(f"Error in get_multicurrency_methods: {e}")
             return {'success': False, 'error': str(e)}
+
+    @http.route('/pos/save_multicurrency_payment', type='json', auth='user')
+    def save_multicurrency_payment(self, payment_data):
+        """Save multicurrency payment with original currency amounts"""
+        try:
+            payment = request.env['pos.payment'].browse(payment_data['id'])
+            if payment.exists():
+                payment.write({
+                    'payment_currency_id': payment_data.get('payment_currency_id'),
+                    'payment_amount_currency': payment_data.get('payment_amount_currency'),
+                    'payment_exchange_rate': payment_data.get('payment_exchange_rate'),
+                })
+                return {'success': True}
+            return {'success': False, 'error': 'Payment not found'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

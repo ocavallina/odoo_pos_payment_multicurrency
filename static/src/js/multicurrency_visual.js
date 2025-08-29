@@ -11,7 +11,7 @@ patch(PaymentScreen.prototype, {
         super.setup();
         console.log('[MultiCurrency] Loading with HTTP bypass...');
         this.loadMulticurrencyData();
-        this.createDiagnosticPanel();
+        //this.createDiagnosticPanel();
     },
     
     async loadMulticurrencyData() {

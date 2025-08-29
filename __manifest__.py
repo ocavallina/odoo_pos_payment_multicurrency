@@ -12,12 +12,14 @@
         'security/ir.model.access.csv',
         'views/pos_config_views.xml',
         'views/pos_payment_method_views.xml',
+        'views/pos_payment_multicurrency_report.xml',
     ],
     'assets': {
-        'point_of_sale._assets_pos': [
-            'pos_payment_multicurrency/static/src/js/multicurrency_visual.js',
-        ],
-    },
+    'point_of_sale._assets_pos': [
+        'pos_payment_multicurrency/static/src/js/multicurrency_visual.js',
+        'pos_payment_multicurrency/static/src/js/multicurrency_payment_interface.js',
+    ],
+},
     'installable': True,
     'auto_install': False,
     'license': 'LGPL-3',
