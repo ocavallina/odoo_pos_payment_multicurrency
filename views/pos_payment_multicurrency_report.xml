@@ -1,27 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="view_pos_payment_report" model="ir.ui.view">
-        <field name="name">POS Payments Report</field>
+    <record id="view_pos_payment_multicurrency_list" model="ir.ui.view">
+        <field name="name">pos.payment.multicurrency.list</field>
         <field name="model">pos.payment</field>
         <field name="arch" type="xml">
-            <tree string="POS Payments" create="false" edit="false">
+            <list string="Multi-Currency Payments" create="false" edit="false">
+                <field name="payment_date"/>
                 <field name="session_id"/>
                 <field name="payment_method_id"/>
-                <field name="amount" sum="Total"/>
-            </tree>
+                <field name="amount" sum="Total Base"/>
+                <field name="payment_currency_id"/>
+                <field name="payment_amount_currency" sum="Total Foreign"/>
+                <field name="payment_exchange_rate"/>
+            </list>
         </field>
     </record>
 
-    <record id="action_pos_payment_report" model="ir.actions.act_window">
-        <field name="name">POS Payments Report</field>
+    <record id="action_pos_payment_multicurrency_report" model="ir.actions.act_window">
+        <field name="name">Multi-Currency Payments</field>
         <field name="res_model">pos.payment</field>
-        <field name="view_mode">tree</field>
-        <field name="view_id" ref="view_pos_payment_report"/>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="view_pos_payment_multicurrency_list"/>
+        <field name="domain">[('payment_currency_id', '!=', False)]</field>
     </record>
 
     <menuitem 
-        id="menu_pos_payment_report"
-        name="POS Payments" 
+        id="menu_pos_multicurrency_payments"
+        name="Multi-Currency Payments" 
         parent="point_of_sale.menu_point_of_sale"
-        action="action_pos_payment_report"/>
+        action="action_pos_payment_multicurrency_report"/>
 </odoo>

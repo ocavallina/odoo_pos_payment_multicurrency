@@ -21,18 +21,15 @@ patch(PaymentScreen.prototype, {
         });
     },
 
-    // Override del método de agregar línea de pago
     addNewPaymentLine(paymentMethod) {
         console.log(`[MultiCurrency Interface] Adding payment: ${paymentMethod.name}`);
         
-        // Si es un método con moneda extranjera, mostrar interfaz especial
         if (paymentMethod.payment_currency_id) {
             console.log(`[MultiCurrency Interface] Foreign currency method: ${paymentMethod.payment_currency_id.name}`);
             this.showMultiCurrencyInterface(paymentMethod);
-            return; // No crear la línea de pago todavía
+            return;
         }
         
-        // Si es método normal, proceder normalmente
         return super.addNewPaymentLine(paymentMethod);
     },
 
@@ -58,7 +55,6 @@ patch(PaymentScreen.prototype, {
         const rate = this.multicurrencyState.exchangeRate;
         const baseCurrency = this.pos.config.currency_id || { name: 'Unknown', symbol: '$' };
         
-        // Crear modal
         const modal = document.createElement('div');
         modal.className = 'multicurrency-input-modal';
         modal.style.cssText = `
@@ -85,7 +81,6 @@ patch(PaymentScreen.prototype, {
             text-align: center !important;
         `;
         
-        // Pendiente de la orden - usando métodos seguros
         let orderTotal = 0;
         let pendingAmount = 0;
         
@@ -97,12 +92,11 @@ patch(PaymentScreen.prototype, {
             }
         } catch (e) {
             console.warn('[MultiCurrency Interface] Error getting order totals:', e);
-            pendingAmount = 100; // Valor por defecto
+            pendingAmount = 100;
         }
         
         const suggestedForeignAmount = (pendingAmount / rate).toFixed(2);
         
-        // Función para formatear moneda compatible con Odoo 18
         const formatCurrency = (amount, currencySymbol = baseCurrency.symbol || '$') => {
             return `${currencySymbol}${amount.toFixed(2)}`;
         };
@@ -188,7 +182,6 @@ patch(PaymentScreen.prototype, {
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
         
-        // Event listeners
         const input = modal.querySelector('#currency-amount-input');
         const convertedAmountEl = modal.querySelector('#converted-amount');
         
@@ -210,7 +203,6 @@ patch(PaymentScreen.prototype, {
             modal.remove();
         });
         
-        // Cerrar modal al hacer click fuera
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 modal.remove();
@@ -218,17 +210,15 @@ patch(PaymentScreen.prototype, {
             }
         });
         
-        // Focus en input y seleccionar texto
         setTimeout(() => {
             input.focus();
             input.select();
         }, 100);
         
-        // Trigger inicial del cálculo
         input.dispatchEvent(new Event('input'));
     },
 
-    confirmCurrencyPayment() {
+    async confirmCurrencyPayment() {
         const method = this.multicurrencyState.selectedMethod;
         const currencyAmount = this.multicurrencyState.currencyAmount;
         const convertedAmount = this.multicurrencyState.convertedAmount;
@@ -247,50 +237,91 @@ patch(PaymentScreen.prototype, {
         });
         
         try {
-            // Crear línea de pago con datos multicurrency
             const paymentLine = super.addNewPaymentLine(method);
             
             if (paymentLine) {
-                // Establecer el monto convertido - Odoo 18 compatible
                 if (typeof paymentLine.set_amount === 'function') {
                     paymentLine.set_amount(convertedAmount);
                 } else {
-                    // Fallback para diferentes versiones de Odoo
                     paymentLine.amount = convertedAmount;
                     
-                    // Trigger update si existe
                     if (typeof paymentLine.trigger === 'function') {
                         paymentLine.trigger('change:amount');
                     }
                 }
                 
-                // Guardar datos de multicurrency para el backend
-                Object.assign(paymentLine, {
-                    payment_currency_amount: currencyAmount,
-                    payment_exchange_rate: rate,
-                    payment_currency_id: method.payment_currency_id,
-                    is_multicurrency: true,
-                    original_currency_name: method.payment_currency_id.name,
-                    // Datos para envío al backend
-                    payment_method_id: method.id,
-                    currency_id: method.payment_currency_id.id,
-                });
+                // ESTRATEGIA AGRESIVA: Almacenar en múltiples lugares
                 
-                // Fix 1: Forzar actualización del balance pendiente
+                // 1. En el payment line directamente
+                paymentLine.is_multicurrency = true;
+                paymentLine.payment_currency_id = method.payment_currency_id.id;
+                paymentLine.payment_currency_amount = currencyAmount;
+                paymentLine.payment_exchange_rate = rate;
+                
+                // 2. En la orden para sincronización
+                const order = this.pos.get_order();
+                if (order) {
+                    // Inicializar array si no existe
+                    if (!order.multicurrency_payments) {
+                        order.multicurrency_payments = [];
+                    }
+                    
+                    // Agregar datos multicurrency
+                    order.multicurrency_payments.push({
+                        payment_method_id: method.id,
+                        payment_currency_id: method.payment_currency_id.id,
+                        payment_currency_amount: currencyAmount,
+                        payment_exchange_rate: rate,
+                        amount: convertedAmount,
+                        timestamp: Date.now()
+                    });
+                    
+                    console.log('[DEBUG] Stored multicurrency data in order:', order.multicurrency_payments);
+                }
+                
+                // 3. Hook del export_as_JSON si existe
+                if (paymentLine.export_as_JSON) {
+                    const originalExport = paymentLine.export_as_JSON;
+                    paymentLine.export_as_JSON = function() {
+                        const json = originalExport.call(this);
+                        json.is_multicurrency = true;
+                        json.payment_currency_id = method.payment_currency_id.id;
+                        json.payment_currency_amount = currencyAmount;
+                        json.payment_exchange_rate = rate;
+                        console.log('[DEBUG] Enhanced export_as_JSON called:', json);
+                        return json;
+                    };
+                }
+                
+                // 4. Intentar guardado inmediato si hay ID
+                setTimeout(async () => {
+                    try {
+                        if (paymentLine.id) {
+                            await this.pos.env.services.rpc({
+                                model: 'pos.payment',
+                                method: 'write',
+                                args: [[paymentLine.id], {
+                                    'payment_currency_id': method.payment_currency_id.id,
+                                    'payment_amount_currency': currencyAmount,
+                                    'payment_exchange_rate': rate,
+                                }]
+                            });
+                            console.log('[DEBUG] Immediate RPC save successful');
+                        }
+                    } catch (e) {
+                        console.log('[DEBUG] Immediate RPC save failed:', e);
+                    }
+                }, 1000);
+                
                 try {
                     const order = this.pos.get_order();
                     if (order) {
-                        // Odoo 18 compatible - forzar re-render directo
                         this.render();
-                        
-                        // Dispatch evento personalizado para actualizar componentes
                         this.env.bus.trigger('payment-line-added', paymentLine);
-                        
                         console.log('[MultiCurrency Interface] Order totals updated after payment');
                     }
                 } catch (updateError) {
                     console.warn('[MultiCurrency Interface] Error updating totals:', updateError);
-                    // Fallback: forzar re-render después de timeout
                     setTimeout(() => {
                         try {
                             this.render();
@@ -369,5 +400,33 @@ patch(PaymentScreen.prototype, {
         setTimeout(() => error.remove(), 3000);
     }
 });
+
+// Patch para el objeto Order usando el registry del POS
+setTimeout(() => {
+    try {
+        // Acceder al Order model a través del POS
+        const orderPrototype = window.odoo?.loader?.modules?.get('@point_of_sale/app/models')?.Order?.prototype;
+        
+        if (orderPrototype) {
+            console.log('[DEBUG] Found Order prototype, patching export_as_JSON');
+            
+            const originalExportAsJSON = orderPrototype.export_as_JSON;
+            orderPrototype.export_as_JSON = function() {
+                const json = originalExportAsJSON.call(this);
+                
+                if (this.multicurrency_payments) {
+                    json.multicurrency_payments = this.multicurrency_payments;
+                    console.log('[DEBUG] Order JSON with multicurrency data:', json.multicurrency_payments);
+                }
+                
+                return json;
+            };
+        } else {
+            console.warn('[DEBUG] Could not find Order prototype for patching');
+        }
+    } catch (e) {
+        console.error('[DEBUG] Error patching Order:', e);
+    }
+}, 2000);
 
 console.log('[MultiCurrency Interface] Payment interface loaded');
