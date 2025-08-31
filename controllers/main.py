@@ -8,6 +8,48 @@ _logger = logging.getLogger(__name__)
 
 class PosMultiCurrencyController(http.Controller):
     
+    @http.route('/pos/save_multicurrency_payment_temp', type='json', auth='user')
+    def save_multicurrency_payment_temp(self, **kwargs):
+        """Almacenar datos multicurrency temporalmente antes de sincronizar orden"""
+        try:
+            _logger.info(f"[MultiCurrency] Received temp payment data: {kwargs}")
+            
+            # Obtener datos desde kwargs o params
+            payment_data = kwargs if kwargs else request.jsonrequest.get('params', {})
+            
+            # Validar datos requeridos
+            required_fields = ['payment_method_id', 'payment_currency_id', 
+                             'payment_currency_amount', 'payment_exchange_rate']
+            
+            for field in required_fields:
+                if field not in payment_data:
+                    return {'success': False, 'error': f'Missing field: {field}'}
+            
+            # Obtener orden actual desde el contexto del POS
+            # En lugar de usar order ID (que aún no existe), usar el UUID de orden
+            order_uuid = payment_data.get('order_uuid')
+            if not order_uuid:
+                # Intentar obtener desde contexto o generar temporal
+                order_uuid = f"temp_{payment_data['payment_method_id']}_{payment_data['payment_currency_id']}"
+            
+            # Almacenar datos temporalmente
+            pos_order = request.env['pos.order']
+            result = pos_order.store_multicurrency_temp(order_uuid, {
+                'payment_method_id': payment_data['payment_method_id'],
+                'payment_currency_id': payment_data['payment_currency_id'],
+                'payment_currency_amount': payment_data['payment_currency_amount'],
+                'payment_exchange_rate': payment_data['payment_exchange_rate'],
+            })
+            
+            if result:
+                return {'success': True, 'message': 'Multicurrency data stored temporarily'}
+            else:
+                return {'success': False, 'error': 'Failed to store data'}
+                
+        except Exception as e:
+            _logger.error(f"[MultiCurrency] Error storing temp payment data: {e}")
+            return {'success': False, 'error': str(e)}
+    
     @http.route('/pos/refresh_exchange_rates', type='json', auth='user')
     def refresh_exchange_rates(self, config_id=None):
         """Refresh exchange rates for POS payment methods"""

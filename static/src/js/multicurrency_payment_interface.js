@@ -4,7 +4,7 @@ import { patch } from "@web/core/utils/patch";
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import { useState } from "@odoo/owl";
 
-console.log('[MultiCurrency Interface] Loading payment interface...');
+console.log('[MultiCurrency Interface] Loading fixed payment interface...');
 
 patch(PaymentScreen.prototype, {
     
@@ -237,105 +237,191 @@ patch(PaymentScreen.prototype, {
         });
         
         try {
-            const paymentLine = super.addNewPaymentLine(method);
+            // CORRECCIÓN: addNewPaymentLine devuelve boolean, debemos obtener el payment desde la orden
+            const paymentCreated = await super.addNewPaymentLine(method);
+            console.log('[MultiCurrency] Payment creation result:', paymentCreated);
             
-            if (paymentLine) {
-                if (typeof paymentLine.set_amount === 'function') {
-                    paymentLine.set_amount(convertedAmount);
-                } else {
-                    paymentLine.amount = convertedAmount;
-                    
-                    if (typeof paymentLine.trigger === 'function') {
-                        paymentLine.trigger('change:amount');
-                    }
-                }
-                
-                // ESTRATEGIA AGRESIVA: Almacenar en múltiples lugares
-                
-                // 1. En el payment line directamente
-                paymentLine.is_multicurrency = true;
-                paymentLine.payment_currency_id = method.payment_currency_id.id;
-                paymentLine.payment_currency_amount = currencyAmount;
-                paymentLine.payment_exchange_rate = rate;
-                
-                // 2. En la orden para sincronización
+            if (paymentCreated) {
+                // Obtener el payment line recién creado desde la orden
                 const order = this.pos.get_order();
-                if (order) {
-                    // Inicializar array si no existe
-                    if (!order.multicurrency_payments) {
-                        order.multicurrency_payments = [];
+                
+                // DEBUG: Mostrar estructura completa de la orden
+                console.log('[MultiCurrency DEBUG] Order object structure:');
+                console.log('  - Order keys:', Object.keys(order));
+                console.log('  - Order prototype:', Object.getPrototypeOf(order));
+                console.log('  - Payment-related properties:', Object.keys(order).filter(k => k.toLowerCase().includes('payment')));
+                
+                // Intentar diferentes formas de acceder a payment lines
+                let paymentLines = null;
+                if (order.payment_ids) {
+                    paymentLines = order.payment_ids;
+                    console.log('[MultiCurrency] Using order.payment_ids');
+                } else if (order.paymentlines) {
+                    paymentLines = order.paymentlines;
+                    console.log('[MultiCurrency] Using order.paymentlines');
+                } else if (order.get_paymentlines) {
+                    try {
+                        paymentLines = order.get_paymentlines();
+                        console.log('[MultiCurrency] Using order.get_paymentlines()');
+                    } catch (e) {
+                        console.log('[MultiCurrency] get_paymentlines() failed:', e);
                     }
-                    
-                    // Agregar datos multicurrency
-                    order.multicurrency_payments.push({
-                        payment_method_id: method.id,
-                        payment_currency_id: method.payment_currency_id.id,
-                        payment_currency_amount: currencyAmount,
-                        payment_exchange_rate: rate,
-                        amount: convertedAmount,
-                        timestamp: Date.now()
-                    });
-                    
-                    console.log('[DEBUG] Stored multicurrency data in order:', order.multicurrency_payments);
+                } else {
+                    console.error('[MultiCurrency] Cannot find payment lines in order:', Object.keys(order));
+                    this.showError('No se pudo acceder a las líneas de pago');
+                    return;
                 }
                 
-                // 3. Hook del export_as_JSON si existe
-                if (paymentLine.export_as_JSON) {
-                    const originalExport = paymentLine.export_as_JSON;
+                console.log('[MultiCurrency] Payment lines found:', paymentLines);
+                console.log('[MultiCurrency] Payment lines type:', typeof paymentLines);
+                console.log('[MultiCurrency] Payment lines length/size:', paymentLines?.length || paymentLines?.size || 'unknown');
+                
+                // Buscar el último payment line del método específico
+                let paymentLine = null;
+                if (Array.isArray(paymentLines)) {
+                    for (let i = paymentLines.length - 1; i >= 0; i--) {
+                        if (paymentLines[i].payment_method_id.id === method.id) {
+                            paymentLine = paymentLines[i];
+                            break;
+                        }
+                    }
+                } else if (paymentLines && paymentLines.models) {
+                    // Si es una colección
+                    const paymentsArray = paymentLines.models;
+                    for (let i = paymentsArray.length - 1; i >= 0; i--) {
+                        if (paymentsArray[i].payment_method_id.id === method.id) {
+                            paymentLine = paymentsArray[i];
+                            break;
+                        }
+                    }
+                } else if (paymentLines && typeof paymentLines.forEach === 'function') {
+                    // Si tiene forEach (colección iterable)
+                    let lastPayment = null;
+                    paymentLines.forEach(payment => {
+                        if (payment.payment_method_id.id === method.id) {
+                            lastPayment = payment;
+                        }
+                    });
+                    paymentLine = lastPayment;
+                }
+                
+                    console.log('[MultiCurrency] Found payment line:', paymentLine);
+                    
+                    // DEBUG: Forzar export_as_JSON inmediatamente para ver si funciona
+                    if (paymentLine.export_as_JSON) {
+                        console.log('[MultiCurrency] Testing export_as_JSON before override...');
+                        const originalJson = paymentLine.export_as_JSON();
+                        console.log('[MultiCurrency] Original JSON:', originalJson);
+                    }
+                
+                if (paymentLine) {
+                    // Configurar monto base
+                    if (typeof paymentLine.set_amount === 'function') {
+                        paymentLine.set_amount(convertedAmount);
+                    } else {
+                        paymentLine.amount = convertedAmount;
+                    }
+                    
+                    // NUEVA ESTRATEGIA: Almacenar multicurrency en el export_as_JSON
+                    const originalExportAsJSON = paymentLine.export_as_JSON;
                     paymentLine.export_as_JSON = function() {
-                        const json = originalExport.call(this);
+                        console.log('[MultiCurrency] 🔥 export_as_JSON CALLED!');
+                        
+                        const json = originalExportAsJSON ? originalExportAsJSON.call(this) : {
+                            name: this.name || 'Payment',
+                            amount: this.amount || 0,
+                            payment_method_id: method.id,
+                            payment_date: new Date().toISOString()
+                        };
+                        
+                        // AGREGAR DATOS MULTICURRENCY AL JSON DEL PAYMENT
                         json.is_multicurrency = true;
                         json.payment_currency_id = method.payment_currency_id.id;
                         json.payment_currency_amount = currencyAmount;
                         json.payment_exchange_rate = rate;
-                        console.log('[DEBUG] Enhanced export_as_JSON called:', json);
+                        
+                        console.log('[MultiCurrency] ✅ Payment export_as_JSON with multicurrency data:');
+                        console.log('  - Currency ID:', json.payment_currency_id);
+                        console.log('  - Currency Amount:', json.payment_currency_amount);
+                        console.log('  - Exchange Rate:', json.payment_exchange_rate);
+                        console.log('  - Base Amount:', json.amount);
+                        console.log('[MultiCurrency] 📤 SENDING TO BACKEND:', json);
+                        
                         return json;
                     };
-                }
-                
-                // 4. Intentar guardado inmediato si hay ID
-                setTimeout(async () => {
-                    try {
-                        if (paymentLine.id) {
-                            await this.pos.env.services.rpc({
-                                model: 'pos.payment',
-                                method: 'write',
-                                args: [[paymentLine.id], {
-                                    'payment_currency_id': method.payment_currency_id.id,
-                                    'payment_amount_currency': currencyAmount,
-                                    'payment_exchange_rate': rate,
-                                }]
-                            });
-                            console.log('[DEBUG] Immediate RPC save successful');
-                        }
-                    } catch (e) {
-                        console.log('[DEBUG] Immediate RPC save failed:', e);
-                    }
-                }, 1000);
-                
-                try {
-                    const order = this.pos.get_order();
-                    if (order) {
-                        this.render();
-                        this.env.bus.trigger('payment-line-added', paymentLine);
-                        console.log('[MultiCurrency Interface] Order totals updated after payment');
-                    }
-                } catch (updateError) {
-                    console.warn('[MultiCurrency Interface] Error updating totals:', updateError);
+                    
+                    // DEBUG: Verificar que el override funciona
                     setTimeout(() => {
-                        try {
-                            this.render();
-                        } catch (e) {
-                            console.warn('Fallback render failed:', e);
+                        console.log('[MultiCurrency] Testing enhanced export_as_JSON after 1 second...');
+                        if (paymentLine.export_as_JSON) {
+                            const testJson = paymentLine.export_as_JSON();
+                            console.log('[MultiCurrency] Enhanced JSON test:', testJson);
                         }
-                    }, 100);
+                    }, 1000);
+                    
+                    // NUEVA ESTRATEGIA: Envío directo al backend via HTTP
+                    setTimeout(async () => {
+                        try {
+                            console.log('[MultiCurrency] 🚀 Sending multicurrency data directly to backend...');
+                            
+                            // Obtener UUID de la orden actual
+                            const order = this.pos.get_order();
+                            const orderUuid = order ? (order.uuid || order.uid || `temp_${Date.now()}`) : `temp_${Date.now()}`;
+                            
+                            const multicurrencyData = {
+                                order_uuid: orderUuid,
+                                payment_method_id: method.id,
+                                payment_currency_id: method.payment_currency_id.id,
+                                payment_currency_amount: currencyAmount,
+                                payment_exchange_rate: rate,
+                                base_amount: convertedAmount
+                            };
+                            
+                            console.log('[MultiCurrency] Sending data:', multicurrencyData);
+                            
+                            // Usar fetch directamente como alternativa más compatible
+                            const response = await fetch('/pos/save_multicurrency_payment_temp', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    jsonrpc: '2.0',
+                                    method: 'call',
+                                    params: multicurrencyData,
+                                    id: Date.now()
+                                })
+                            });
+                            
+                            const data = await response.json();
+                            const result = data.result;
+                            
+                            if (result && result.success) {
+                                console.log('[MultiCurrency] ✅ Multicurrency data sent successfully via HTTP');
+                                this.showBackendSuccess();
+                            } else {
+                                console.log('[MultiCurrency] ❌ Failed to send multicurrency data:', result?.error || 'Unknown error');
+                                this.showBackendError(result?.error || 'Unknown error');
+                            }
+                            
+                        } catch (error) {
+                            console.error('[MultiCurrency] Error sending multicurrency data:', error);
+                            this.showBackendError(error.message);
+                        }
+                    }, 2000);
+                    
+                    // Refresh UI
+                    this.render();
+                    
+                    console.log('[MultiCurrency Interface] Payment line enhanced successfully:', paymentLine);
+                    this.showPaymentSuccess(method, currencyAmount, convertedAmount, rate);
+                    
+                } else {
+                    console.error('[MultiCurrency Interface] Could not find created payment line');
+                    this.showError('No se pudo encontrar la línea de pago creada');
                 }
-                
-                console.log('[MultiCurrency Interface] Payment line created successfully:', paymentLine);
-                this.showPaymentSuccess(method, currencyAmount, convertedAmount, rate);
-                
             } else {
-                console.error('[MultiCurrency Interface] Failed to create payment line');
+                console.error('[MultiCurrency Interface] Payment creation failed');
                 this.showError('Error al crear línea de pago');
             }
             
@@ -398,35 +484,57 @@ patch(PaymentScreen.prototype, {
         error.textContent = message;
         document.body.appendChild(error);
         setTimeout(() => error.remove(), 3000);
+    },
+
+    showBackendSuccess() {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            z-index: 999997;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        `;
+        
+        notification.innerHTML = `
+            <div>Datos Multi-Currency enviados al Backend</div>
+            <div style="font-size: 12px; margin-top: 5px; opacity: 0.9;">Los campos se guardarán al finalizar la orden</div>
+        `;
+        
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 4000);
+    },
+
+    showBackendError(error) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #FF5722;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            z-index: 999997;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        `;
+        
+        notification.innerHTML = `
+            <div>Error enviando datos Multi-Currency</div>
+            <div style="font-size: 12px; margin-top: 5px; opacity: 0.9;">${error}</div>
+        `;
+        
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 5000);
     }
 });
 
-// Patch para el objeto Order usando el registry del POS
-setTimeout(() => {
-    try {
-        // Acceder al Order model a través del POS
-        const orderPrototype = window.odoo?.loader?.modules?.get('@point_of_sale/app/models')?.Order?.prototype;
-        
-        if (orderPrototype) {
-            console.log('[DEBUG] Found Order prototype, patching export_as_JSON');
-            
-            const originalExportAsJSON = orderPrototype.export_as_JSON;
-            orderPrototype.export_as_JSON = function() {
-                const json = originalExportAsJSON.call(this);
-                
-                if (this.multicurrency_payments) {
-                    json.multicurrency_payments = this.multicurrency_payments;
-                    console.log('[DEBUG] Order JSON with multicurrency data:', json.multicurrency_payments);
-                }
-                
-                return json;
-            };
-        } else {
-            console.warn('[DEBUG] Could not find Order prototype for patching');
-        }
-    } catch (e) {
-        console.error('[DEBUG] Error patching Order:', e);
-    }
-}, 2000);
-
-console.log('[MultiCurrency Interface] Payment interface loaded');
+console.log('[MultiCurrency Interface] Fixed payment interface loaded');
