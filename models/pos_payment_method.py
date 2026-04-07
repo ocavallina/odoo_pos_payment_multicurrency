@@ -37,42 +37,16 @@ class PosPaymentMethod(models.Model):
         for record in self:
             record.current_exchange_rate = record.get_exchange_rate()
 
-    # ENFOQUE CONSERVADOR: Solo extender campos, no override métodos críticos
     @api.model
     def _load_pos_data_fields(self, config_id):
-        """Add new fields to POS frontend data - CONSERVATIVE APPROACH"""
-        try:
-            # Llamar al método padre de forma segura
-            fields = super()._load_pos_data_fields(config_id)
-        except AttributeError:
-            # Si el método padre no existe, usar campos básicos
-            fields = [
-                'id', 'name', 'journal_id', 'is_cash_count', 
-                'split_transactions', 'outstanding_account_id'
-            ]
-        except Exception as e:
-            # Log error pero continúa
-            import logging
-            _logger = logging.getLogger(__name__)
-            _logger.warning(f"Error calling super()._load_pos_data_fields: {e}")
-            fields = [
-                'id', 'name', 'journal_id', 'is_cash_count', 
-                'split_transactions', 'outstanding_account_id'
-            ]
-        
-        # Añadir campos multi-currency de forma segura
-        multicurrency_fields = [
-            'payment_currency_id', 
-            'exchange_rate_source', 
+        """Add multicurrency fields to POS frontend data"""
+        fields = super()._load_pos_data_fields(config_id)
+        fields += [
+            'payment_currency_id',
+            'exchange_rate_source',
             'manual_exchange_rate',
-            'current_exchange_rate'
+            'current_exchange_rate',
         ]
-        
-        # Verificar que el campo existe en el modelo antes de añadirlo
-        for field in multicurrency_fields:
-            if hasattr(self, field) and field not in fields:
-                fields.append(field)
-                
         return fields
 
     def get_exchange_rate(self, date=None):

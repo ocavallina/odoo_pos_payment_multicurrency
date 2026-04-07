@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'POS Multi-Currency Payments',
-    'version': '18.0.1.0.0',
+    'version': '19.0.1.0.0',
     'category': 'Point of Sale',
     'summary': 'Enable payments in multiple currencies on POS',
     'description': """
@@ -15,11 +15,10 @@
         'views/pos_payment_multicurrency_report.xml',
     ],
     'assets': {
-    'point_of_sale._assets_pos': [
-        'pos_payment_multicurrency/static/src/js/multicurrency_visual.js',
-        'pos_payment_multicurrency/static/src/js/multicurrency_payment_interface.js',
-    ],
-},
+        'point_of_sale._assets_pos': [
+            'pos_payment_multicurrency/static/src/js/multicurrency_payment_interface.js',
+        ],
+    },
     'installable': True,
     'auto_install': False,
     'license': 'LGPL-3',
